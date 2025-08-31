@@ -162,7 +162,7 @@ class hackathonController{
         catch(error)
         {
             console.error(`Error Retrieving Hackathon: `,error);
-            ResponseHandler.error(res,`Could not retrieve Hackathon`,error.message);
+            ResponseHandler.error(res,`Could not retrieve Hackathon`,500,error.message);
         }
     }
 

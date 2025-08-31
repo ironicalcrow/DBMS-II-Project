@@ -93,14 +93,15 @@ class Hackathon {
 
   static async get_all_hackathon() {
     const result = await pool.execute(
-      `SELECT h.*, 
-              LISTAGG(c.criteria_id || ':' || c.criteria_info, ',') WITHIN GROUP (ORDER BY c.criteria_id) AS criterias,
-              LISTAGG(j.judge_username, ',') WITHIN GROUP (ORDER BY j.judge_username) AS judges
-       FROM hackathon h
-       LEFT JOIN criterias c ON h.hackathon_id = c.hackathon_id
-       LEFT JOIN judges j ON h.hackathon_id = j.hackathon_id
-       GROUP BY h.hackathon_id, h.hackathon_name, h.host_username, h.duration, h.genre, h.rule_book,
-                h.hackathon_image, h.starting_date, h.ending_date, h.added_date`,
+      `SELECT h.hackathon_id, h.hackathon_name, h.host_username, h.duration, h.genre, h.rule_book,
+       h.hackathon_image, h.starting_date, h.ending_date, h.added_date, h.h_type,
+       LISTAGG(c.criteria_id || ':' || c.criteria_info, ',') WITHIN GROUP (ORDER BY c.criteria_id) AS criterias,
+       LISTAGG(j.judge_username, ',') WITHIN GROUP (ORDER BY j.judge_username) AS judges
+FROM hackathon h
+LEFT JOIN criterias c ON h.hackathon_id = c.hackathon_id
+LEFT JOIN judges j ON h.hackathon_id = j.hackathon_id
+GROUP BY h.hackathon_id, h.hackathon_name, h.host_username, h.duration, h.genre, h.rule_book,
+         h.hackathon_image, h.starting_date, h.ending_date, h.added_date, h.h_type`,
       {},
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );

@@ -6,6 +6,7 @@ const ResponseHandler = require("../utils/responseHandler");
 class AuthController {
   static async register(req, res) {
     try {
+      console.log(req.body);
       const { username, full_name, email, password, date_of_birth } = req.body;
 
       const usernameExists = await User.findByUsername(username);
@@ -77,6 +78,7 @@ class AuthController {
 
   static async fetchProfile(req, res) {
     try {
+      console.log(req.user)
       const username = req.user.username;
       const user = await User.getProfile(username);
 
