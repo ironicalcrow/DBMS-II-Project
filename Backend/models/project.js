@@ -4,11 +4,11 @@ const User = require("../models/user");
 const oracledb = require("oracledb");
 const clobToString = require("../utils/clobToStrings");
 
-// Automatically fetch CLOBs as strings
+
 oracledb.fetchAsString = [oracledb.CLOB];
 
 class Project {
-  // ✅ Create Project for Individual User
+
   static async createProject(projectData, username) {
     const {
       project_name,
@@ -40,7 +40,7 @@ class Project {
 
       const project_id = result.outBinds.project_id[0];
 
-      // Link user
+
       await conn.execute(
         `INSERT INTO p_u_junction (project_id, username) VALUES (:project_id, :username)`,
         { project_id, username },
@@ -53,7 +53,7 @@ class Project {
     }
   }
 
-  // ✅ Create Project for Team
+
   static async createProjectForTeam(projectData, team_id) {
     const {
       project_name,
@@ -85,7 +85,7 @@ class Project {
 
       const project_id = result.outBinds.project_id[0];
 
-      // Fetch team members
+
       const team_info = await team.team_members(team_id);
       if (!team_info.length) throw new Error("No team participants found");
 
@@ -97,7 +97,7 @@ class Project {
         { autoCommit: false }
       );
 
-      // Link each participant
+
       for (const participant of team_info) {
         const username = (participant.USERNAME || "").trim();
         if (!username) continue;
@@ -119,7 +119,7 @@ class Project {
     }
   }
 
-  // ✅ Manual mapping for a project row
+
   static async mapProjectRow(row) {
     if (!row) return null;
     return {
@@ -139,7 +139,7 @@ class Project {
     return await Promise.all(rows.map((r) => Project.mapProjectRow(r)));
   }
 
-  // ✅ Get Project by ID
+
   static async getProjectById(project_id) {
     const conn = await pool.getConnection();
     try {
@@ -154,7 +154,7 @@ class Project {
     }
   }
 
-  // ✅ Get All Projects
+
   static async getAllProjects() {
     const conn = await pool.getConnection();
     try {
@@ -169,7 +169,7 @@ class Project {
     }
   }
 
-  // ✅ Get Projects by Username
+
   static async getProjectsByUsername(username) {
     const conn = await pool.getConnection();
     try {
@@ -186,7 +186,7 @@ class Project {
     }
   }
 
-  // ✅ Update Project
+
   static async updateProject(project_id, updateData) {
     const {
       project_name,
@@ -224,7 +224,7 @@ class Project {
     }
   }
 
-  // ✅ Delete Project
+
   static async deleteProject(project_id) {
     const conn = await pool.getConnection();
     try {
@@ -243,7 +243,7 @@ class Project {
     }
   }
 
-  // ✅ Get Users by Project
+
   static async getUsersByProject(project_id) {
     const conn = await pool.getConnection();
     try {
@@ -263,7 +263,7 @@ class Project {
     }
   }
 
-  // ✅ Get Projects by Genre
+
   static async getProjectsByGenre(project_genre) {
     const conn = await pool.getConnection();
     try {
@@ -278,7 +278,7 @@ class Project {
     }
   }
 
-  // ✅ Get Projects by Date
+
   static async getProjectsByDate() {
     const conn = await pool.getConnection();
     try {
@@ -293,7 +293,7 @@ class Project {
     }
   }
 
-  // ✅ Get Project by Team ID
+
   static async getProjectByTeamId(team_id) {
     const conn = await pool.getConnection();
     try {
@@ -310,7 +310,7 @@ class Project {
     }
   }
 
-  // ✅ Get Projects by Hackathon & User
+
   static async getProjectsByHackathonAndUser(hackathonId, username) {
     const conn = await pool.getConnection();
     try {

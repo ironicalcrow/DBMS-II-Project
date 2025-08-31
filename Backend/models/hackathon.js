@@ -3,11 +3,11 @@ const User = require("../models/user");
 const oracledb = require("oracledb");
 const clobToString = require("../utils/clobToStrings");
 
-// Automatically fetch CLOBs as strings
+
 oracledb.fetchAsString = [oracledb.CLOB];
 
 class Hackathon {
-  // Host a hackathon
+
   static async host_hackathon(hackathon_data, username) {
     const {
       hackathon_name,
@@ -46,7 +46,7 @@ class Hackathon {
 
     const hackathon_id = result.outBinds.hackathon_id[0];
 
-    // Insert judges
+
     const judgeUsernames = judge_username
       .split(",")
       .map((j) => j.trim())
@@ -61,7 +61,7 @@ class Hackathon {
       }
     }
 
-    // Insert judging criteria
+
     for (const c of judging_criteria) {
       const criteriaInfo = (c.criteriainfo || "").trim();
       if (!criteriaInfo) continue;
@@ -76,18 +76,18 @@ class Hackathon {
     return { hackathon_id };
   }
 
-  // Generic mapping function for hackathon rows
+
   static async mapHackathon(rows) {
     return await Promise.all(
       rows.map(async (r) => {
-        // Fetch judging criteria
+
         const criteriaResult = await pool.execute(
           `SELECT criteria_id, criteria_info FROM criterias WHERE hackathon_id = :hackathon_id ORDER BY criteria_id`,
           { hackathon_id: r.HACKATHON_ID },
           { outFormat: oracledb.OUT_FORMAT_OBJECT }
         );
 
-        // Fetch judges
+
         const judgeResult = await pool.execute(
           `SELECT judge_username FROM judges WHERE hackathon_id = :hackathon_id`,
           { hackathon_id: r.HACKATHON_ID },
@@ -115,7 +115,7 @@ class Hackathon {
     );
   }
 
-  // Get all hackathons
+
   static async get_all_hackathon() {
     const result = await pool.execute(
       `
@@ -128,7 +128,7 @@ class Hackathon {
     return this.mapHackathon(result.rows);
   }
 
-  // Generic fetch by column
+
   static async get_hackathon_by_column(column, value) {
     const sql = `SELECT * FROM hackathon WHERE ${column} = :value`;
     const result = await pool.execute(
@@ -180,7 +180,7 @@ class Hackathon {
     }));
   }
 
-  // Get hackathons by judge
+
   static async get_hackathons_by_judges(judge_username, only_upcoming = true) {
     const sql = `
       SELECT h.*
@@ -197,7 +197,7 @@ class Hackathon {
     return this.mapHackathon(result.rows);
   }
 
-  // Determine user role
+
   static async role_finding(username, hackathon_id) {
     const result = await pool.execute(
       `

@@ -4,7 +4,7 @@ const JWTUtils = require("../utils/jwtUtils");
 const ResponseHandler = require("../utils/responseHandler");
 
 class AuthController {
-  // ✅ User registration
+
   static async register(req, res) {
     try {
       const { username, full_name, email, password, date_of_birth } = req.body;
@@ -58,18 +58,17 @@ class AuthController {
     }
   }
 
-  // ✅ User login
+
   static async login(req, res) {
     try {
       const { email, password } = req.body;
       console.log("Login request:", req.body);
 
-      // Fetch user and normalize column names
+
       const user = await User.findByEmailWithPassword(email);
       console.log("User fetched for login:", user);
       if (!user) return ResponseHandler.notFound(res, "User");
 
-      // Compare password
       const isValidPassword = await PasswordUtils.comparePassword(
         password,
         user.password_hash // mapUserRow ensures lowercase
@@ -103,7 +102,7 @@ class AuthController {
     }
   }
 
-  // ✅ Fetch user profile
+
   static async fetchProfile(req, res) {
     try {
       const username = req.user.username;
@@ -124,7 +123,7 @@ class AuthController {
     }
   }
 
-  // ✅ Update profile
+
   static async update_profile(req, res) {
     try {
       const username = req.user.username;
@@ -151,7 +150,7 @@ class AuthController {
     }
   }
 
-  // ✅ Update password
+
   static async updatePassword(req, res) {
     try {
       const username = req.user.username;

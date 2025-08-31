@@ -4,7 +4,7 @@ const Hackathon = require("../models/hackathon");
 const Team = require("../models/participants"); // Fix missing import
 
 class HackathonController {
-  // Host a hackathon
+
   static async host_hackathons(req, res) {
     try {
       const {
@@ -53,7 +53,7 @@ class HackathonController {
     }
   }
 
-  // Retrieve hackathons by host
+
   static async retrieve_hackathon(req, res) {
     try {
       const { username } = req.user;
@@ -82,7 +82,7 @@ class HackathonController {
     }
   }
 
-  // Get hackathons by name
+
   static async get_hackathons_by_name(req, res) {
     try {
       const { name } = req.params;
@@ -107,7 +107,7 @@ class HackathonController {
     }
   }
 
-  // Get hackathons by genre
+
   static async get_hackathons_by_genre(req, res) {
     try {
       const { genre } = req.params;
@@ -132,7 +132,7 @@ class HackathonController {
     }
   }
 
-  // Get hackathons by duration
+
   static async get_hackathons_by_duration(req, res) {
     try {
       const { duration } = req.params;
@@ -157,7 +157,7 @@ class HackathonController {
     }
   }
 
-  // Get judges for a hackathon
+
   static async getJudgedetails(req, res) {
     try {
       const { hackathon_id } = req.params;
@@ -183,7 +183,7 @@ class HackathonController {
     }
   }
 
-  // Get all hackathons
+
   static async get_all_hackathon(req, res) {
     try {
       const hackathons = await Hackathon.get_all_hackathon();
@@ -207,7 +207,7 @@ class HackathonController {
     }
   }
 
-  // Get hackathons for a judge (by username query)
+
   static async get_judges_hackathons(req, res) {
     try {
       const { username } = req.query;
@@ -264,7 +264,7 @@ class HackathonController {
     }
   }
 
-  // Get user role in hackathon
+
   static async get_user_role(req, res) {
     try {
       const { username } = req.user;
@@ -295,7 +295,7 @@ class HackathonController {
     }
   }
 
-  // Get marks given by a judge
+
   static async getGivenMarks(req, res) {
     try {
       const { username } = req.user;

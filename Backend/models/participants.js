@@ -2,11 +2,11 @@ const { pool } = require("../config/database");
 const oracledb = require("oracledb");
 const clobToString = require("../utils/clobToStrings");
 
-// Automatically fetch CLOBs as strings
+
 oracledb.fetchAsString = [oracledb.CLOB];
 
 class Team {
-  // ✅ Create a team and return team_id
+
   static async team_creation(team_name, team_info) {
     const sql = `
       INSERT INTO teams (team_name, team_info)
@@ -22,7 +22,7 @@ class Team {
     return result.outBinds.team_id[0];
   }
 
-  // ✅ Add participants to a team
+
   static async team_participants({
     hackathon_id,
     team_name,
@@ -51,7 +51,7 @@ class Team {
     return team_id;
   }
 
-  // ✅ Map team rows
+
   static async mapTeam(rows) {
     return await Promise.all(
       rows.map(async (r) => ({
@@ -62,7 +62,7 @@ class Team {
     );
   }
 
-  // ✅ Find all teams in a hackathon
+
   static async finding_team(hackathon_id) {
     const result = await pool.execute(
       `SELECT DISTINCT t.team_id, t.team_name, t.team_info
@@ -76,7 +76,7 @@ class Team {
     return this.mapTeam(result.rows);
   }
 
-  // ✅ Get members of a team
+
   static async team_members(team_id) {
     const result = await pool.execute(
       `SELECT team_id, hackathon_id, username FROM team_participants WHERE team_id = :team_id`,
@@ -91,7 +91,7 @@ class Team {
     }));
   }
 
-  // ✅ Find team by hackathon and user
+
   static async findByHackathonAndUser(hackathon_id, username) {
     const result = await pool.execute(
       `SELECT t.team_id, t.team_name, t.team_info
@@ -105,7 +105,7 @@ class Team {
     return this.mapTeam(result.rows);
   }
 
-  // ✅ Insert marks for a team
+
   static async team_marking(
     team_id,
     hackathon_id,
@@ -131,7 +131,7 @@ class Team {
     await pool.commit();
   }
 
-  // ✅ Leaderboard
+
   static async leader_board(hackathon_id) {
     const result = await pool.execute(
       `SELECT 
@@ -157,12 +157,12 @@ class Team {
     }));
   }
 
-  // ✅ Find team by username in a hackathon
+
   static async team_finding_by_username(username, hackathon_id) {
     return this.findByHackathonAndUser(hackathon_id, username);
   }
 
-  // ✅ Get project data by team ID
+
   static async get_project_data_by_team_id(team_id) {
     const result = await pool.execute(
       `SELECT p.project_id, p.project_name, p.description

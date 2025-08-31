@@ -1,18 +1,17 @@
-// config/database.js
+
 const oracledb = require("oracledb");
 require("dotenv").config();
 
-// Enable auto-commit globally (our models rely on this)
+
 oracledb.autoCommit = true;
 
-// Optional Oracle Instant Client init
+
 try {
   oracledb.initOracleClient?.();
 } catch (err) {
   console.warn("Oracle client init skipped:", err.message);
 }
 
-// Create a pool (do NOT await at top-level)
 const _poolPromise = oracledb.createPool({
   user: process.env.DB_USER,
   password: process.env.DB_PASS,
@@ -22,7 +21,7 @@ const _poolPromise = oracledb.createPool({
   poolIncrement: Number(process.env.DB_POOL_INCREMENT) || 1,
 });
 
-// Pool wrapper
+
 const pool = {
   execute: async (sql, binds = {}, options = {}) => {
     const poolInstance = await _poolPromise;
@@ -50,7 +49,7 @@ const pool = {
     await poolInstance.close(0);
   },
 
-  _poolPromise, // expose pool promise in case models need it
+  _poolPromise,
 };
 
 module.exports = { pool };

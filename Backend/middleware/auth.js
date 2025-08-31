@@ -9,7 +9,7 @@ const authenticateToken = async (req, res, next) => {
 
     const decoded = JWTUtils.verifyToken(token)
 
-    // Verify user still exists
+
     const user = await User.findByUsername(decoded.username)
     if (!user) {
       return ResponseHandler.unauthorized(res, "User not found")

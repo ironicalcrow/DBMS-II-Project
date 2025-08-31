@@ -1,11 +1,11 @@
 const { pool } = require("../config/database");
 const oracledb = require("oracledb");
 
-// Automatically fetch CLOBs as strings
+
 oracledb.fetchAsString = [oracledb.CLOB];
 
 class User {
-  // ✅ Helper to map a single user row to consistent object
+
   static async mapUserRow(row) {
     if (!row) return null;
     return {
@@ -29,7 +29,7 @@ class User {
     return await Promise.all(rows.map((r) => User.mapUserRow(r)));
   }
 
-  // ✅ Create User
+
   static async create_user(userData) {
     const { username, full_name, email, password_hash, date_of_birth } =
       userData;
@@ -46,7 +46,7 @@ class User {
     return { message: "User created successfully" };
   }
 
-  // ✅ Find by Username or Email
+
   static async findByUsernameOrEmail(username, email) {
     const sql = `SELECT * FROM users WHERE USERNAME = :username OR EMAIL = :email`;
     const result = await pool.execute(
@@ -57,7 +57,7 @@ class User {
     return await User.mapUserRow(result.rows[0]);
   }
 
-  // ✅ Find by Username
+
   static async findByUsername(username) {
     const sql = `SELECT * FROM users WHERE USERNAME = :username`;
     const result = await pool.execute(
@@ -68,7 +68,7 @@ class User {
     return await User.mapUserRow(result.rows[0]);
   }
 
-  // ✅ Find by Email
+
   static async findByEmail(email) {
     const sql = `SELECT * FROM users WHERE EMAIL = :email`;
     const result = await pool.execute(
@@ -79,7 +79,7 @@ class User {
     return await User.mapUserRow(result.rows[0]);
   }
 
-  // ✅ Find by Username with Password
+
   static async findByUsernameWithPassword(username) {
     const sql = `SELECT * FROM users WHERE USERNAME = :username`;
     const result = await pool.execute(
@@ -95,7 +95,7 @@ class User {
     return user;
   }
 
-  // ✅ Find by Email with Password
+
   static async findByEmailWithPassword(email) {
     const sql = `SELECT * FROM users WHERE EMAIL = :email`;
     const result = await pool.execute(
@@ -111,12 +111,12 @@ class User {
     return user;
   }
 
-  // ✅ Get Profile
+
   static async getProfile(username) {
     return await User.findByUsername(username);
   }
 
-  // ✅ Update Profile
+
   static async updateProfile(username, updateData) {
     const {
       full_name,
@@ -171,7 +171,7 @@ class User {
     return { rowsAffected: result.rowsAffected || 0 };
   }
 
-  // ✅ Update Password
+
   static async updatePassword(username, newPasswordHash) {
     const sql = `UPDATE users SET PASSWORD_HASH = :password_hash WHERE USERNAME = :username`;
     const result = await pool.execute(
