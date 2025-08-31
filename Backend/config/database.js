@@ -1,64 +1,53 @@
+// config/database.js
 const oracledb = require("oracledb");
 require("dotenv").config();
 
-// Optional: enable auto commit for convenience
+// Auto-commit enabled by default
 oracledb.autoCommit = true;
 
-// Oracle Instant Client initialization is optional in v6+, so this is safe
-oracledb.initOracleClient?.();
+// Optional Oracle Instant Client init
+try {
+  oracledb.initOracleClient?.();
+} catch (err) {
+  console.warn("Oracle client init skipped:", err.message);
+}
 
-// Connection Pool Configuration
-const dataConfiguration = {
+// Create a pool promise (do NOT await at top-level)
+const _poolPromise = oracledb.createPool({
   user: process.env.DB_USER,
   password: process.env.DB_PASS,
-  connectString: `${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`, // EZCONNECT format
-  poolMin: 1,
-  poolMax: 10,
-  poolIncrement: 1,
-};
+  connectString: `${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_SERVICE}`,
+  poolMin: Number(process.env.DB_POOL_MIN) || 1,
+  poolMax: Number(process.env.DB_POOL_MAX) || 10,
+  poolIncrement: Number(process.env.DB_POOL_INCREMENT) || 1,
+});
 
-let pool;
-
-// Initialize the connection pool
-const initPool = async () => {
-  try {
-    if (!pool) {
-      pool = await oracledb.createPool(dataConfiguration);
-      console.log("✅ Oracle connection pool created successfully!");
+// Pool wrapper
+const pool = {
+  execute: async (sql, binds = {}, options = {}) => {
+    const p = await _poolPromise;
+    let connection;
+    try {
+      connection = await p.getConnection();
+      const opts = Object.assign({ outFormat: oracledb.OUT_FORMAT_OBJECT }, options);
+      const result = await connection.execute(sql, binds, opts);
+      return result;
+    } finally {
+      if (connection) await connection.close();
     }
-  } catch (error) {
-    console.error("❌ Failed to create Oracle connection pool:", error.message);
-    process.exit(1);
-  }
+  },
+
+  getConnection: async () => {
+    const p = await _poolPromise;
+    return p.getConnection();
+  },
+
+  close: async () => {
+    const p = await _poolPromise;
+    await p.close(0);
+  },
+
+  _poolPromise, // in case you want to await pool creation explicitly
 };
 
-// Test connection
-const testConnection = async () => {
-  try {
-    const connection = await pool.getConnection();
-    console.log("✅ Connected to Oracle database successfully!");
-    await connection.close();
-  } catch (error) {
-    console.error("❌ Failed to connect to Oracle database:", error.message);
-    process.exit(1);
-  }
-};
-
-// Graceful shutdown (to close pool on app exit)
-const closePool = async () => {
-  try {
-    if (pool) {
-      await pool.close(10); // 10 seconds timeout
-      console.log("✅ Oracle connection pool closed.");
-    }
-  } catch (error) {
-    console.error("❌ Error closing Oracle connection pool:", error.message);
-  }
-};
-
-module.exports = {
-  initPool,
-  testConnection,
-  getPool: () => pool,
-  closePool,
-};
+module.exports = { pool };

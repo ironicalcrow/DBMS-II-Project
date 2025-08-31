@@ -1,150 +1,201 @@
 const { pool } = require("../config/database");
+const team = require("../models/participants");
+const User = require('../models/user');
+const oracledb = require("oracledb");
 
-class team {
-  // Insert into teams and return team_id
-  static async team_creation(team_name, team_info) {
+class Project {
+  // Create project for a single user
+  static async createProject(projectData, username) {
+    const { project_name, git_repo, overview, motivation, features, project_genre } = projectData;
+
     const result = await pool.execute(
-      `BEGIN
-         INSERT INTO teams (team_name, team_info)
-         VALUES (:team_name, :team_info)
-         RETURNING team_id INTO :team_id;
-       END;`,
-      {
-        team_name,
-        team_info,
-        team_id: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER },
+      `INSERT INTO projects 
+        (project_name, git_repo, overview, motivation, features, project_genre, creation_date)
+       VALUES (:project_name, :git_repo, :overview, :motivation, :features, :project_genre, SYSDATE)
+       RETURNING project_id INTO :project_id`,
+      { 
+        project_name, git_repo, overview, motivation, features, project_genre,
+        project_id: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER }
       }
     );
-    return result.outBinds.team_id;
+
+    const project_id = result.outBinds.project_id[0];
+
+    await pool.execute(
+      `INSERT INTO p_u_junction (project_id, username) VALUES (:project_id, :username)`,
+      { project_id, username }
+    );
+
+    return { project_id };
   }
 
-  // Insert participants into team_participants table
-  static async team_participants(data) {
-    const { hackathon_id, team_name, team_info, team_participants } = data;
+  // Create project for a team
+  static async createProject_for_team(projectData, team_id) {
+    const { project_name, git_repo, overview, motivation, features, project_genre } = projectData;
 
-    const team_id = await this.team_creation(team_name, team_info);
-    const participants_username = team_participants.map((p) => p.trim());
-
-    for (const users of participants_username) {
-      const [exists] = await pool.execute(
-        `SELECT COUNT(*) as count
-         FROM team_participants
-         WHERE username = :username AND hackathon_id = :hackathon_id`,
-        { username: users, hackathon_id }
-      );
-
-      if (exists.COUNT > 0) {
-        console.error(`User already exists, Username: ${users}`);
-        continue;
+    const result = await pool.execute(
+      `INSERT INTO projects 
+        (project_name, git_repo, overview, motivation, features, project_genre, creation_date)
+       VALUES (:project_name, :git_repo, :overview, :motivation, :features, :project_genre, SYSDATE)
+       RETURNING project_id INTO :project_id`,
+      { 
+        project_name, git_repo, overview, motivation, features, project_genre,
+        project_id: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER }
       }
+    );
 
-      await pool.execute(
-        `INSERT INTO team_participants (team_id, hackathon_id, username)
-         VALUES (:team_id, :hackathon_id, :username)`,
-        { team_id, hackathon_id, username: users }
-      );
+    const project_id = result.outBinds.project_id[0];
+
+    const team_info = await team.team_members(team_id);
+    if (!team_info.length) throw new Error("No team participants found");
+    const hackathon_id = team_info[0].hackathon_id;
+
+    await pool.execute(
+      `INSERT INTO p_t_junction (team_id, project_id, hackathon_id)
+       VALUES (:team_id, :project_id, :hackathon_id)`,
+      { team_id, project_id, hackathon_id }
+    );
+
+    for (const participant of team_info) {
+      const username = (participant.username || "").trim();
+      if (!username) continue;
+
+      const user = await User.findByUsername(username);
+      if (user) {
+        await pool.execute(
+          `INSERT INTO p_u_junction (project_id, username) VALUES (:project_id, :username)`,
+          { project_id, username }
+        );
+      }
     }
 
-    return team_id;
+    return { project_id };
   }
 
-  // Get teams in a hackathon
-  static async finding_team(hackathon_id) {
+  // Get project by ID
+  static async getProjectById(project_id) {
     const result = await pool.execute(
-      `SELECT DISTINCT t.team_id, t.team_name, t.team_info
-       FROM teams t
-       JOIN team_participants tp ON t.team_id = tp.team_id
-       WHERE tp.hackathon_id = :hackathon_id`,
-      { hackathon_id }
+      `SELECT * FROM projects WHERE project_id = :project_id`,
+      { project_id },
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    return result.rows[0] || null;
+  }
+
+  // Get all projects
+  static async getAllProjects() {
+    const result = await pool.execute(
+      `SELECT * FROM projects`,
+      {},
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
     return result.rows;
   }
 
-  // Get team members
-  static async team_members(team_id) {
+  // Get projects by username
+  static async getProjectsByUsername(username) {
     const result = await pool.execute(
-      `SELECT * FROM team_participants WHERE team_id = :team_id`,
-      { team_id }
-    );
-    return result.rows;
-  }
-
-  // Find team by hackathon and user
-  static async findByHackathonAndUser(hackathon_id, username) {
-    const result = await pool.execute(
-      `SELECT t.team_id, t.team_name, t.team_info
-       FROM teams t
-       JOIN team_participants tp ON t.team_id = tp.team_id
-       WHERE tp.hackathon_id = :hackathon_id AND tp.username = :username`,
-      { hackathon_id, username }
-    );
-    return result.rows;
-  }
-
-  // Judges mark teams
-  static async team_marking(team_id, hackathon_id, judge_username, criteria_ids, marks, comments) {
-    for (let i = 0; i < criteria_ids.length; i++) {
-      await pool.execute(
-        `INSERT INTO marking (hackathon_id, judge_username, team_id, criteria_id, marks, comments)
-         VALUES (:hackathon_id, :judge_username, :team_id, :criteria_id, :marks, :comments)`,
-        {
-          hackathon_id,
-          judge_username,
-          team_id,
-          criteria_id: criteria_ids[i],
-          marks: marks[i],
-          comments,
-        }
-      );
-    }
-  }
-
-  // Leaderboard for hackathon
-static async leader_board(hackathon_id) {
-  const result = await pool.execute(
-    `BEGIN GetLeaderBoard(:hackathon_id, :cursor); END;`,
-    {
-      hackathon_id: hackathon_id,
-      cursor: { dir: oracledb.BIND_OUT, type: oracledb.CURSOR }
-    }
-  );
-
-  const rs = result.outBinds.cursor;
-  const rows = await rs.getRows(); // fetch all rows
-  await rs.close();
-
-  // ✅ Ensures output format matches your original MySQL version
-  return rows.map(r => ({
-    TEAM_ID: r.TEAM_ID,
-    TEAM_NAME: r.TEAM_NAME,
-    TOTAL_MARKS: r.TOTAL_MARKS,
-    TEAM_RANK: r.TEAM_RANK
-  }));
-}
-
-  // Find team by username
-  static async team_finding_by_username(username, hackathon_id) {
-    const result = await pool.execute(
-      `SELECT *
-       FROM teams t
-       JOIN team_participants tp ON t.team_id = tp.team_id
-       WHERE tp.username = :username AND tp.hackathon_id = :hackathon_id`,
-      { username, hackathon_id }
-    );
-    return result.rows;
-  }
-
-  // Get project by team_id
-  static async get_project_data_by_team_id(team_id) {
-    const result = await pool.execute(
-      `SELECT *
+      `SELECT p.* 
        FROM projects p
-       JOIN p_t_junction pt ON p.project_id = pt.project_id
-       WHERE pt.team_id = :team_id`,
-      { team_id }
+       JOIN p_u_junction pu ON p.project_id = pu.project_id
+       WHERE pu.username = :username`,
+      { username },
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
     return result.rows;
   }
+
+  // Update project
+  static async updateProject(project_id, updateData) {
+    const { project_name, git_repo, overview, motivation, features, project_genre } = updateData;
+
+    await pool.execute(
+      `UPDATE projects SET
+         project_name = NVL(:project_name, project_name),
+         git_repo = NVL(:git_repo, git_repo),
+         overview = NVL(:overview, overview),
+         motivation = NVL(:motivation, motivation),
+         features = NVL(:features, features),
+         project_genre = NVL(:project_genre, project_genre)
+       WHERE project_id = :project_id`,
+      { project_name, git_repo, overview, motivation, features, project_genre, project_id }
+    );
+
+    return await Project.getProjectById(project_id);
+  }
+
+  // Delete project
+  static async deleteProject(project_id) {
+    await pool.execute(
+      `DELETE FROM p_u_junction WHERE project_id = :project_id`,
+      { project_id }
+    );
+    await pool.execute(
+      `DELETE FROM projects WHERE project_id = :project_id`,
+      { project_id }
+    );
+    return { project_id };
+  }
+
+  // Get users by project
+  static async getUsersByProject(project_id) {
+    const result = await pool.execute(
+      `SELECT u.username, u.full_name
+       FROM users u
+       JOIN p_u_junction pu ON u.username = pu.username
+       WHERE pu.project_id = :project_id`,
+      { project_id },
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    return result.rows;
+  }
+
+  // Get projects by genre
+  static async getProjectsByGenre(project_genre) {
+    const result = await pool.execute(
+      `SELECT * FROM projects WHERE project_genre = :project_genre`,
+      { project_genre },
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    return result.rows;
+  }
+
+  // Get projects by creation date descending
+  static async getProjectbyDate() {
+    const result = await pool.execute(
+      `SELECT * FROM projects ORDER BY creation_date DESC`,
+      {},
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    return result.rows;
+  }
+
+  // Get project by team
+  static async teams_project(team_id) {
+    const result = await pool.execute(
+      `SELECT p.*
+       FROM projects p
+       JOIN p_t_junction ptj ON p.project_id = ptj.project_id
+       WHERE ptj.team_id = :team_id`,
+      { team_id },
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    return result.rows;
+  }
+
+  // Get projects by hackathon and user (using procedure)
+  static async getProjectsByHackathonAndUser(hackathonId, username) {
+    const result = await pool.execute(
+      `BEGIN GetProjectsByHackathonAndUser(:hackathon_id, :username, :cursor); END;`,
+      { hackathon_id: hackathonId, username, cursor: { dir: oracledb.BIND_OUT, type: oracledb.CURSOR } }
+    );
+
+    const rs = result.outBinds.cursor;
+    const rows = await rs.getRows(); // fetch all rows
+    await rs.close();
+
+    return rows;
+  }
 }
 
-module.exports = team;
+module.exports = Project;

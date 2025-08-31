@@ -6,20 +6,14 @@ const oracledb = require("oracledb");
 class Project {
   // Create project for a single user
   static async createProject(projectData, username) {
-    const {
-      project_name, git_repo, overview, motivation, features, project_genre
-    } = projectData;
+    const { project_name, git_repo, overview, motivation, features, project_genre } = projectData;
 
     const result = await pool.execute(
-      `BEGIN
-         INSERT INTO projects (
-           project_name, git_repo, overview, motivation, features, project_genre, creation_date
-         ) VALUES (
-           :project_name, :git_repo, :overview, :motivation, :features, :project_genre, SYSDATE
-         )
-         RETURNING project_id INTO :project_id;
-       END;`,
-      {
+      `INSERT INTO projects 
+        (project_name, git_repo, overview, motivation, features, project_genre, creation_date)
+       VALUES (:project_name, :git_repo, :overview, :motivation, :features, :project_genre, SYSDATE)
+       RETURNING project_id INTO :project_id`,
+      { 
         project_name, git_repo, overview, motivation, features, project_genre,
         project_id: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER }
       }
@@ -40,15 +34,11 @@ class Project {
     const { project_name, git_repo, overview, motivation, features, project_genre } = projectData;
 
     const result = await pool.execute(
-      `BEGIN
-         INSERT INTO projects (
-           project_name, git_repo, overview, motivation, features, project_genre, creation_date
-         ) VALUES (
-           :project_name, :git_repo, :overview, :motivation, :features, :project_genre, SYSDATE
-         )
-         RETURNING project_id INTO :project_id;
-       END;`,
-      {
+      `INSERT INTO projects 
+        (project_name, git_repo, overview, motivation, features, project_genre, creation_date)
+       VALUES (:project_name, :git_repo, :overview, :motivation, :features, :project_genre, SYSDATE)
+       RETURNING project_id INTO :project_id`,
+      { 
         project_name, git_repo, overview, motivation, features, project_genre,
         project_id: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER }
       }
@@ -76,8 +66,6 @@ class Project {
           `INSERT INTO p_u_junction (project_id, username) VALUES (:project_id, :username)`,
           { project_id, username }
         );
-      } else {
-        console.warn(`User not found: ${username} — skipping entry`);
       }
     }
 
@@ -87,61 +75,39 @@ class Project {
   // Get project by ID
   static async getProjectById(project_id) {
     const result = await pool.execute(
-      `BEGIN
-         OPEN :cursor FOR
-         SELECT * FROM projects WHERE project_id = :project_id;
-       END;`,
-      {
-        project_id,
-        cursor: { dir: oracledb.BIND_OUT, type: oracledb.CURSOR }
-      }
+      `SELECT * FROM projects WHERE project_id = :project_id`,
+      { project_id },
+      { outFormat: oracledb.OUT_FORMAT_OBJECT } // ✅ fixed
     );
-
-    const rs = result.outBinds.cursor;
-    const rows = await rs.getRows();
-    await rs.close();
-    return rows[0] || null;
+    return result.rows[0] || null;
   }
 
   // Get all projects
   static async getAllProjects() {
     const result = await pool.execute(
-      `BEGIN
-         OPEN :cursor FOR SELECT * FROM projects;
-       END;`,
-      { cursor: { dir: oracledb.BIND_OUT, type: oracledb.CURSOR } }
+      `SELECT * FROM projects`,
+      {},
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
-
-    const rs = result.outBinds.cursor;
-    const rows = await rs.getRows();
-    await rs.close();
-    return rows;
+    return result.rows;
   }
 
   // Get projects by username
   static async getProjectsByUsername(username) {
     const result = await pool.execute(
-      `BEGIN
-         OPEN :cursor FOR
-         SELECT p.* 
-         FROM projects p
-         JOIN p_u_junction pu ON p.project_id = pu.project_id
-         WHERE pu.username = :username;
-       END;`,
-      { username, cursor: { dir: oracledb.BIND_OUT, type: oracledb.CURSOR } }
+      `SELECT p.* 
+       FROM projects p
+       JOIN p_u_junction pu ON p.project_id = pu.project_id
+       WHERE pu.username = :username`,
+      { username },
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
-
-    const rs = result.outBinds.cursor;
-    const rows = await rs.getRows();
-    await rs.close();
-    return rows;
+    return result.rows;
   }
 
   // Update project
   static async updateProject(project_id, updateData) {
-    const {
-      project_name, git_repo, overview, motivation, features, project_genre
-    } = updateData;
+    const { project_name, git_repo, overview, motivation, features, project_genre } = updateData;
 
     await pool.execute(
       `UPDATE projects SET
@@ -155,7 +121,7 @@ class Project {
       { project_name, git_repo, overview, motivation, features, project_genre, project_id }
     );
 
-    return { project_id };
+    return await Project.getProjectById(project_id);
   }
 
   // Delete project
@@ -164,100 +130,72 @@ class Project {
       `DELETE FROM p_u_junction WHERE project_id = :project_id`,
       { project_id }
     );
-
     await pool.execute(
       `DELETE FROM projects WHERE project_id = :project_id`,
       { project_id }
     );
-
     return { project_id };
   }
 
   // Get users by project
   static async getUsersByProject(project_id) {
     const result = await pool.execute(
-      `BEGIN
-         OPEN :cursor FOR
-         SELECT u.username, u.full_name
-         FROM users u
-         JOIN p_u_junction pu ON u.username = pu.username
-         WHERE pu.project_id = :project_id;
-       END;`,
-      { project_id, cursor: { dir: oracledb.BIND_OUT, type: oracledb.CURSOR } }
+      `SELECT u.username, u.full_name
+       FROM users u
+       JOIN p_u_junction pu ON u.username = pu.username
+       WHERE pu.project_id = :project_id`,
+      { project_id },
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
-
-    const rs = result.outBinds.cursor;
-    const rows = await rs.getRows();
-    await rs.close();
-    return rows;
+    return result.rows;
   }
 
   // Get projects by genre
   static async getProjectsByGenre(project_genre) {
     const result = await pool.execute(
-      `BEGIN
-         OPEN :cursor FOR SELECT * FROM projects WHERE project_genre = :project_genre;
-       END;`,
-      { project_genre, cursor: { dir: oracledb.BIND_OUT, type: oracledb.CURSOR } }
+      `SELECT * FROM projects WHERE project_genre = :project_genre`,
+      { project_genre },
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
-
-    const rs = result.outBinds.cursor;
-    const rows = await rs.getRows();
-    await rs.close();
-    return rows;
+    return result.rows;
   }
 
   // Get projects by creation date descending
   static async getProjectbyDate() {
     const result = await pool.execute(
-      `BEGIN
-         OPEN :cursor FOR SELECT * FROM projects ORDER BY creation_date DESC;
-       END;`,
-      { cursor: { dir: oracledb.BIND_OUT, type: oracledb.CURSOR } }
+      `SELECT * FROM projects ORDER BY creation_date DESC`,
+      {},
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
-
-    const rs = result.outBinds.cursor;
-    const rows = await rs.getRows();
-    await rs.close();
-    return rows;
+    return result.rows;
   }
 
   // Get project by team
   static async teams_project(team_id) {
     const result = await pool.execute(
-      `BEGIN
-         OPEN :cursor FOR
-         SELECT p.*
-         FROM projects p
-         JOIN p_t_junction ptj ON p.project_id = ptj.project_id
-         WHERE ptj.team_id = :team_id;
-       END;`,
-      { team_id, cursor: { dir: oracledb.BIND_OUT, type: oracledb.CURSOR } }
+      `SELECT p.*
+       FROM projects p
+       JOIN p_t_junction ptj ON p.project_id = ptj.project_id
+       WHERE ptj.team_id = :team_id`,
+      { team_id },
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    return result.rows;
+  }
+
+  // Get projects by hackathon and user (using procedure)
+  static async getProjectsByHackathonAndUser(hackathonId, username) {
+    const result = await pool.execute(
+      `BEGIN GetProjectsByHackathonAndUser(:hackathon_id, :username, :cursor); END;`,
+      { hackathon_id: hackathonId, username, cursor: { dir: oracledb.BIND_OUT, type: oracledb.CURSOR } }
     );
 
     const rs = result.outBinds.cursor;
     const rows = await rs.getRows();
     await rs.close();
+
     return rows;
   }
-static async getProjectsByHackathonAndUser(hackathonId, username) {
-  const result = await pool.execute(
-    `BEGIN GetProjectsByHackathonAndUser(:hackathonId, :username, :cursor); END;`,
-    {
-      hackathonId,
-      username,
-      cursor: { dir: oracledb.BIND_OUT, type: oracledb.CURSOR }
-    }
-  );
-
-  const rs = result.outBinds.cursor;
-  const rows = await rs.getRows(); // fetch all rows
-  await rs.close();
-
-  // Output format exactly matches original query
-  return rows;
-}
-
 }
 
 module.exports = Project;
