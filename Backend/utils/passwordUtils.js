@@ -5,6 +5,7 @@ class PasswordUtils{
     static async hashpassword(password, saltRounds=12)
     {
         try{
+            
             return await bcrypt.hash(password,saltRounds);
         }
         catch(error){

@@ -1,6 +1,10 @@
 const { pool } = require("../config/database");
 const User = require("../models/user");
 const oracledb = require("oracledb");
+const clobToString = require("../utils/clobToStrings");
+
+// Automatically fetch CLOBs as strings
+oracledb.fetchAsString = [oracledb.CLOB];
 
 class Hackathon {
   // Host a hackathon
@@ -9,23 +13,23 @@ class Hackathon {
       hackathon_name,
       duration,
       genre,
-      rule_book,
+      rule_book = "",
       hackathon_image,
       starting_date,
       ending_date,
-      judge_username = [],
-      judging_criteria = []
+      judge_username = "",
+      judging_criteria = [],
     } = hackathon_data;
 
+    // Insert hackathon and get hackathon_id
     const result = await pool.execute(
-      `INSERT INTO hackathon(
-         hackathon_name, host_username, duration, genre, rule_book,
-         hackathon_image, starting_date, ending_date, added_date
-       ) VALUES (
-         :hackathon_name, :username, :duration, :genre, :rule_book,
-         :hackathon_image, TO_DATE(:starting_date,'YYYY-MM-DD'), TO_DATE(:ending_date,'YYYY-MM-DD'), SYSDATE
-       )
-       RETURNING hackathon_id INTO :hackathon_id`,
+      `
+      INSERT INTO hackathon 
+        (hackathon_name, host_username, duration, genre, rule_book, hackathon_image, starting_date, ending_date, added_date)
+      VALUES (:hackathon_name, :username, :duration, :genre, :rule_book, :hackathon_image,
+        TO_DATE(:starting_date,'YYYY-MM-DD'), TO_DATE(:ending_date,'YYYY-MM-DD'), SYSDATE)
+      RETURNING hackathon_id INTO :hackathon_id
+      `,
       {
         hackathon_name,
         username,
@@ -35,19 +39,19 @@ class Hackathon {
         hackathon_image,
         starting_date,
         ending_date,
-        hackathon_id: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER }
-      }
+        hackathon_id: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER },
+      },
+      { autoCommit: false }
     );
 
     const hackathon_id = result.outBinds.hackathon_id[0];
 
     // Insert judges
-    const judgeUsernames = Array.isArray(judge_username)
-      ? judge_username.map(j => (j || "").toString().trim())
-      : (typeof judge_username === "string" ? judge_username.split(",").map(j => j.trim()) : []);
-
+    const judgeUsernames = judge_username
+      .split(",")
+      .map((j) => j.trim())
+      .filter(Boolean);
     for (const judge of judgeUsernames) {
-      if (!judge) continue;
       const user = await User.findByUsername(judge);
       if (user) {
         await pool.execute(
@@ -57,140 +61,163 @@ class Hackathon {
       }
     }
 
-    // Insert criteria
-    if (Array.isArray(judging_criteria)) {
-      for (const c of judging_criteria) {
-        const criteriaInfo = (c.criteriainfo || "").trim();
-        if (!criteriaInfo) continue;
+    // Insert judging criteria
+    for (const c of judging_criteria) {
+      const criteriaInfo = (c.criteriainfo || "").trim();
+      if (!criteriaInfo) continue;
 
-        await pool.execute(
-          `INSERT INTO criterias (hackathon_id, criteria_info) VALUES (:hackathon_id, :criteria_info)`,
-          { hackathon_id, criteria_info: criteriaInfo }
-        );
-      }
+      await pool.execute(
+        `INSERT INTO criterias (hackathon_id, criteria_info) VALUES (:hackathon_id, :criteria_info)`,
+        { hackathon_id, criteria_info: criteriaInfo }
+      );
     }
 
+    await pool.commit();
     return { hackathon_id };
   }
 
-  static async get_hackathon_by_username(username) {
-    const result = await pool.execute(
-      `SELECT * FROM hackathon WHERE host_username = :username`,
-      { username },
-      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+  // Generic mapping function for hackathon rows
+  static async mapHackathon(rows) {
+    return await Promise.all(
+      rows.map(async (r) => {
+        // Fetch judging criteria
+        const criteriaResult = await pool.execute(
+          `SELECT criteria_id, criteria_info FROM criterias WHERE hackathon_id = :hackathon_id ORDER BY criteria_id`,
+          { hackathon_id: r.HACKATHON_ID },
+          { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        );
+
+        // Fetch judges
+        const judgeResult = await pool.execute(
+          `SELECT judge_username FROM judges WHERE hackathon_id = :hackathon_id`,
+          { hackathon_id: r.HACKATHON_ID },
+          { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        );
+
+        return {
+          hackathon_id: r.HACKATHON_ID,
+          hackathon_name: r.HACKATHON_NAME,
+          host_username: r.HOST_USERNAME,
+          duration: r.DURATION,
+          genre: r.GENRE,
+          rule_book: await clobToString(r.RULE_BOOK),
+          hackathon_image: r.HACKATHON_IMAGE,
+          starting_date: r.STARTING_DATE,
+          ending_date: r.ENDING_DATE,
+          added_date: r.ADDED_DATE,
+          judging_criteria: criteriaResult.rows.map((c) => ({
+            criteria_id: c.CRITERIA_ID,
+            criteriainfo: c.CRITERIA_INFO,
+          })),
+          judges: judgeResult.rows.map((j) => j.JUDGE_USERNAME),
+        };
+      })
     );
-    return result.rows;
   }
 
-  static async get_hackathon_by_genre(genre) {
-    const result = await pool.execute(
-      `SELECT * FROM hackathon WHERE genre = :genre`,
-      { genre },
-      { outFormat: oracledb.OUT_FORMAT_OBJECT }
-    );
-    return result.rows;
-  }
-
+  // Get all hackathons
   static async get_all_hackathon() {
     const result = await pool.execute(
-      `SELECT h.hackathon_id, h.hackathon_name, h.host_username, h.duration, h.genre, h.rule_book,
-       h.hackathon_image, h.starting_date, h.ending_date, h.added_date, h.h_type,
-       LISTAGG(c.criteria_id || ':' || c.criteria_info, ',') WITHIN GROUP (ORDER BY c.criteria_id) AS criterias,
-       LISTAGG(j.judge_username, ',') WITHIN GROUP (ORDER BY j.judge_username) AS judges
-FROM hackathon h
-LEFT JOIN criterias c ON h.hackathon_id = c.hackathon_id
-LEFT JOIN judges j ON h.hackathon_id = j.hackathon_id
-GROUP BY h.hackathon_id, h.hackathon_name, h.host_username, h.duration, h.genre, h.rule_book,
-         h.hackathon_image, h.starting_date, h.ending_date, h.added_date, h.h_type`,
+      `
+      SELECT * FROM hackathon ORDER BY added_date DESC
+      `,
       {},
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
 
-    return result.rows.map(h => ({
-      ...h,
-      judging_criteria: h.criterias
-        ? h.criterias.split(",").map(c => {
-            const [id, info] = c.split(":");
-            return { criteria_id: Number(id), criteriainfo: info };
-          })
-        : [],
-      judges: h.judges ? h.judges.split(",") : []
-    }));
+    return this.mapHackathon(result.rows);
+  }
+
+  // Generic fetch by column
+  static async get_hackathon_by_column(column, value) {
+    const sql = `SELECT * FROM hackathon WHERE ${column} = :value`;
+    const result = await pool.execute(
+      sql,
+      { value },
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    return this.mapHackathon(result.rows);
+  }
+
+  static async get_hackathon_by_username(username) {
+    return this.get_hackathon_by_column("host_username", username);
+  }
+
+  static async get_hackathon_by_genre(genre) {
+    return this.get_hackathon_by_column("genre", genre);
   }
 
   static async get_hackathon_by_id(hackathon_id) {
-    const result = await pool.execute(
-      `SELECT * FROM hackathon WHERE hackathon_id = :hackathon_id`,
-      { hackathon_id },
-      { outFormat: oracledb.OUT_FORMAT_OBJECT }
-    );
-    return result.rows[0] || null;
-  }
-
-  static async get_judge_details(hackathon_id) {
-    const result = await pool.execute(
-      `SELECT u.*, j.hackathon_id
-       FROM users u
-       JOIN judges j ON u.username = j.judge_username
-       WHERE j.hackathon_id = :hackathon_id`,
-      { hackathon_id },
-      { outFormat: oracledb.OUT_FORMAT_OBJECT }
-    );
-    return result.rows;
+    return this.get_hackathon_by_column("hackathon_id", hackathon_id);
   }
 
   static async get_hackathon_by_name(hackathon_name) {
-    const result = await pool.execute(
-      `SELECT * FROM hackathon WHERE hackathon_name = :hackathon_name`,
-      { hackathon_name },
-      { outFormat: oracledb.OUT_FORMAT_OBJECT }
-    );
-    return result.rows;
+    return this.get_hackathon_by_column("hackathon_name", hackathon_name);
   }
 
   static async get_hackathon_by_duration(duration) {
-    const result = await pool.execute(
-      `SELECT * FROM hackathon WHERE duration = :duration`,
-      { duration },
-      { outFormat: oracledb.OUT_FORMAT_OBJECT }
-    );
-    return result.rows;
+    return this.get_hackathon_by_column("duration", duration);
   }
 
-  static async get_hackathons_by_judges(judge_username) {
+  // Get judge details
+  static async get_judge_details(hackathon_id) {
     const result = await pool.execute(
-      `SELECT h.*
-       FROM hackathon h
-       JOIN judges j ON h.hackathon_id = j.hackathon_id
-       WHERE j.judge_username = :judge_username
-         AND h.ending_date >= TRUNC(SYSDATE)`,
+      `
+      SELECT u.username, u.full_name, u.email, u.image
+      FROM users u
+      JOIN judges j ON u.username = j.judge_username
+      WHERE j.hackathon_id = :hackathon_id
+      `,
+      { hackathon_id },
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+
+    return result.rows.map((r) => ({
+      username: r.USERNAME,
+      full_name: r.FULL_NAME,
+      email: r.EMAIL,
+      image: r.IMAGE,
+    }));
+  }
+
+  // Get hackathons by judge
+  static async get_hackathons_by_judges(judge_username, only_upcoming = true) {
+    const sql = `
+      SELECT h.*
+      FROM hackathon h
+      JOIN judges j ON h.hackathon_id = j.hackathon_id
+      WHERE j.judge_username = :judge_username
+      ${only_upcoming ? "AND h.ending_date >= TRUNC(SYSDATE)" : ""}
+    `;
+    const result = await pool.execute(
+      sql,
       { judge_username },
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
-    return result.rows;
+    return this.mapHackathon(result.rows);
   }
 
-  static async get_all_hackathons_by_judges(judge_username) {
-    const result = await pool.execute(
-      `SELECT h.*
-       FROM hackathon h
-       JOIN judges j ON h.hackathon_id = j.hackathon_id
-       WHERE j.judge_username = :judge_username`,
-      { judge_username },
-      { outFormat: oracledb.OUT_FORMAT_OBJECT }
-    );
-    return result.rows;
-  }
-
+  // Determine user role
   static async role_finding(username, hackathon_id) {
     const result = await pool.execute(
-      `SELECT role
-       FROM user_roles
-       WHERE username = :username AND hackathon_id = :hackathon_id`,
+      `
+      SELECT 
+        CASE
+          WHEN h.host_username = :username THEN 'Host'
+          WHEN j.judge_username = :username THEN 'Judge'
+          WHEN tp.username = :username THEN 'Participant'
+          ELSE 'No Role'
+        END AS role
+      FROM hackathon h
+      LEFT JOIN judges j ON j.hackathon_id = h.hackathon_id
+      LEFT JOIN team_participants tp ON tp.hackathon_id = h.hackathon_id
+      WHERE h.hackathon_id = :hackathon_id
+      `,
       { username, hackathon_id },
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
-    return result.rows[0] || null;
+
+    return result.rows.length > 0 ? result.rows[0].ROLE : "No Role";
   }
 }
 

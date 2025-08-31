@@ -2,7 +2,7 @@
 const oracledb = require("oracledb");
 require("dotenv").config();
 
-// Enable auto-commit globally (our models rely on this)
+// Enable auto-commit globally
 oracledb.autoCommit = true;
 
 // Optional Oracle Instant Client init
@@ -25,10 +25,9 @@ const _poolPromise = oracledb.createPool({
 // Pool wrapper
 const pool = {
   execute: async (sql, binds = {}, options = {}) => {
-    const poolInstance = await _poolPromise;
-    const connection = await poolInstance.getConnection();
+    const connection = await (await _poolPromise).getConnection();
     try {
-      // Keep OUT_FORMAT_OBJECT so that rows are always objects (or array if desired)
+      // Always return rows as objects
       const opts = { outFormat: oracledb.OUT_FORMAT_OBJECT, ...options };
       const result = await connection.execute(sql, binds, opts);
       return result;
@@ -41,16 +40,15 @@ const pool = {
   },
 
   getConnection: async () => {
-    const poolInstance = await _poolPromise;
-    return poolInstance.getConnection();
+    return (await _poolPromise).getConnection();
   },
 
   close: async () => {
-    const poolInstance = await _poolPromise;
-    await poolInstance.close(0);
+    const pool = await _poolPromise;
+    await pool.close(0);
   },
 
-  _poolPromise, // expose pool promise in case models need it
+  _poolPromise, // expose in case you need to await pool creation
 };
 
 module.exports = { pool };
